@@ -4,19 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>쓰기 쉬운 GIF 편집기</title>
-  <link rel="stylesheet" href="mode-nav.css">
-  <link rel="stylesheet" href="editor.css?v=2">
+  <script>if (window === window.top && !location.search.includes("pane")) location.replace("index.html#editor");</script>
+  <link rel="stylesheet" href="editor.css?v=3">
   <script defer src="vendor/omggif.js"></script>
   <script defer src="gif-resize.js"></script>
   <script defer src="vendor/gifenc.js"></script>
   <script defer src="vendor/gifsicle.min.js"></script>
   <script defer src="gif-tools.js"></script>
   <script defer src="gif-export.js"></script>
-  <script defer src="editor.js?v=2"></script>
+  <script defer src="editor-draft.js"></script>
+  <script defer src="editor.js?v=3"></script>
 </head>
 <body>
-  <header><a href="https://kmou.ac.kr" target="_blank" rel="noopener noreferrer"><img src="kmou.png" alt="국립한국해양대학교"></a><strong>스마트 GIF 편집기</strong></header>
-  <nav class="mode-nav" aria-label="GIF 작업 선택"><a href="index.html">생성기</a><a href="editor.html" aria-current="page">편집기</a></nav>
   <main>
     <h1>쓰기 쉬운 GIF 편집기</h1>
     <p class="subtitle">GIF 파일을 간편히 편집하기</p>
@@ -53,6 +52,9 @@
             <button id="lock" aria-pressed="true"></button>
             <label for="y">세로 (Y) <output id="yValue" for="y"></output></label>
             <input id="y" type="range" min="5" max="300" value="100">
+            <figure id="sizePreview"><figcaption>크기 미리보기 <output id="previewSize"></output></figcaption>
+              <div id="previewArea"><img id="sizeImage" alt="적용할 크기의 GIF"></div>
+            </figure>
           </div>
           <div class="options" data-tool="Crop" hidden>
             <label>화면 비율 <select id="ratio"><option value="1">1:1</option><option value="1.7777777777777777">16:9</option><option value="0.5625">9:16</option><option value="1.3333333333333333">4:3</option><option value="0.75">3:4</option></select></label>
@@ -85,7 +87,10 @@
           <div class="actions"><button id="back">Back</button><button id="go" class="primary">Go!</button></div>
         </div>
       </section>
-      <button id="reset">다른 GIF 선택</button>
+      <section class="card history"><div class="history-head"><h2>작업 기록</h2><button id="undo" disabled>↶ 이전으로 되돌리기</button></div>
+        <ol id="steps" aria-label="편집 단계"></ol><p id="draftNote" role="status"></p>
+      </section>
+      <button id="reset">새 파일 불러오기 (초기화)</button>
     </div>
     <p id="status" role="status"></p>
     <dialog id="saveDialog"><form method="dialog">

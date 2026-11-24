@@ -3,9 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#06324c">
+  <meta name="theme-color" content="#f0f9fc">
   <title>스마트 GIF 생성기</title>
-  <link rel="stylesheet" href="mode-nav.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,650&display=swap" rel="stylesheet">
@@ -297,6 +296,9 @@
       *, *::before, *::after { animation: none !important; transition: none !important; }
     }
   </style>
+  <link rel="stylesheet" href="mode-nav.css?v=3">
+  <script>document.documentElement.dataset.mode = location.hash === "#editor" ? "editor" : "creator";</script>
+  <script defer src="studio.js"></script>
 </head>
 <body>
   <div class="sea" aria-hidden="true">
@@ -315,13 +317,12 @@
     <a class="logo-link" href="https://kmou.ac.kr" target="_blank" rel="noopener noreferrer">
       <img src="kmou.png" alt="국립한국해양대학교">
     </a>
-    <h1 class="site-name">스마트 GIF 생성기</h1>
+    <nav class="mode-nav" aria-label="GIF 작업 선택">
+      <a href="#creator" data-mode="creator">스마트 GIF 생성기</a><a href="#editor" data-mode="editor">GIF 편집기</a>
+    </nav>
   </header>
-  <nav class="mode-nav" aria-label="GIF 작업 선택">
-    <a href="index.html" aria-current="page">생성기</a><a href="editor.html">편집기</a>
-  </nav>
 
-  <main>
+  <main id="creatorView">
     <section class="hero">
       <p class="eyebrow">동영상을 애니로</p>
       <h2 class="headline"><span class="display">Video</span>를 <span class="display">GIF</span>로 변환</h2>
@@ -456,6 +457,7 @@
       </div>
     </section>
   </main>
+  <iframe id="editorView" title="GIF 편집기" src="editor.html?pane=1"></iframe>
 
   <video id="decoder" class="decoder" muted playsinline preload="auto"></video>
   <script src="vendor/gifenc.js"></script>
@@ -640,18 +642,6 @@
     downloadBtn.addEventListener("click", downloadResult);
 
     if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      let tx = 0, ty = 0, cx = 0, cy = 0;
-      window.addEventListener("pointermove", function (event) {
-        tx = event.clientX / window.innerWidth - 0.5;
-        ty = event.clientY / window.innerHeight - 0.5;
-      });
-      (function glide() {
-        cx += (tx - cx) * 0.06;
-        cy += (ty - cy) * 0.06;
-        document.documentElement.style.setProperty("--mx", cx.toFixed(4));
-        document.documentElement.style.setProperty("--my", cy.toFixed(4));
-        requestAnimationFrame(glide);
-      })();
       dropzone.addEventListener("pointermove", function (event) {
         if (dragOver) return;
         const rect = dropzone.getBoundingClientRect();

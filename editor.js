@@ -9,12 +9,91 @@
   let source, current, filename, originalUrl, resultUrl, resultBlob, sourceHandle, activeTool;
   let encoderReady;
   let locked = true, busy = false, lastAxis = "x";
+  let steps = [], position = -1, previewUrl;
+  let pendingWrite = Promise.resolve(), draftUnavailable = false;
+
+  function persist(step) {
+    const meta = position < 0 ? null : {position,filename,sourceHandle};
+    pendingWrite = pendingWrite.then(() => {
+      if (!meta || (step && meta.position === 0)) draftUnavailable = false;
+      if (!draftUnavailable) return editorDraft.write(meta,step);
+    }).catch(() => {
+      draftUnavailable = true;
+      el("draftNote").textContent = "이 브라우저에서는 작업 기록을 현재 화면에서만 유지합니다.";
+    });
+    return pendingWrite;
+  }
+  function drawHistory() {
+    const list = el("steps");
+    list.replaceChildren();
+    steps.forEach((step,index) => {
+      const item = document.createElement("li");
+      const button = document.createElement("button");
+      button.textContent = (index ? index + ". " : "") + step.label;
+      button.disabled = busy || index === position;
+      if (index === position) button.setAttribute("aria-current","step");
+      button.onclick = () => jump(index);
+      item.append(button);
+      list.append(item);
+    });
+    el("undo").disabled = busy || position <= 0;
+  }
+  function drawResult() {
+    const step = steps[position];
+    const original = position === 0;
+    const video = el("resultVideo");
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+    el("resultImage").removeAttribute("src");
+    if (resultUrl) URL.revokeObjectURL(resultUrl);
+    resultBlob = original ? null : step.blob;
+    resultUrl = original ? null : URL.createObjectURL(resultBlob);
+    el("original").open = original;
+    el("result").hidden = original;
+    if (original) return;
+    const isVideo = resultBlob.type === "video/mp4";
+    el("resultImage").hidden = isVideo;
+    video.hidden = !isVideo;
+    (isVideo ? video : el("resultImage")).src = resultUrl;
+    const resized = step.tool === "Resize";
+    const name = resized ? "Resized_" + filename.replace(/\.gif$/i,"") + ".gif" : saveName();
+    el("download").href = resultUrl;
+    el("download").hidden = !resized;
+    el("resultTitle").textContent = resized ? "Resized GIF" : extension().toUpperCase() + " 편집 결과";
+    el("download").download = el("resultName").textContent = name;
+    el("resultInfo").textContent = info(step.width,step.height,resultBlob,step.frames);
+  }
+  async function jump(index) {
+    if (busy || !steps[index]) return;
+    busy = true;
+    el("workspace").inert = true;
+    try {
+      current = inspectGif(new Uint8Array(await steps[steps[index].gifStep].blob.arrayBuffer()));
+      position = index;
+      showTool("");
+      drawResult();
+      warning();
+      el("status").textContent = steps[index].label + " 단계로 돌아왔습니다.";
+      await persist();
+    } catch {
+      warning("작업 기록을 열지 못했습니다.");
+    } finally {
+      busy = false;
+      el("workspace").inert = false;
+      drawHistory();
+    }
+  }
+  el("undo").onclick = () => jump(position-1);
 
   function warning(message = "") {
     el("warning").textContent = message;
     el("warning").hidden = !message;
   }
   function showTool(name) {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrl = null;
+    el("sizeImage").removeAttribute("src");
     activeTool = name;
     source = current;
     const resize = name === "Resize";
@@ -24,6 +103,8 @@
     el("resizeControls").hidden = !resize;
     document.querySelectorAll("[data-tool]").forEach(panel => panel.hidden = panel.dataset.tool !== name);
     if (resize) {
+      previewUrl = URL.createObjectURL(steps[steps[position].gifStep].blob);
+      el("sizeImage").src = previewUrl;
       el("x").value = el("y").value = 100;
       updateSizes();
     }
@@ -62,7 +143,17 @@
     }
     el("lock").textContent = locked ? "🔒 비율 잠김" : "🔓 비율 풀림";
     el("lock").setAttribute("aria-pressed", String(locked));
+    updatePreview();
   }
+  function updatePreview() {
+    if (!source || activeTool !== "Resize") return;
+    const area = el("previewArea");
+    const scale = Math.min((area.clientWidth-16)/(source.width*3),(area.clientHeight-16)/(source.height*3));
+    el("sizeImage").style.width = Math.max(1,size("x")*scale) + "px";
+    el("sizeImage").style.height = Math.max(1,size("y")*scale) + "px";
+    el("previewSize").textContent = size("x") + " × " + size("y") + " px";
+  }
+  new ResizeObserver(updatePreview).observe(el("previewArea"));
   for (const axis of ["x", "y"]) el(axis).oninput = () => {
     lastAxis = axis;
     if (locked) el(axis === "x" ? "y" : "x").value = el(axis).value;
@@ -79,7 +170,7 @@
       ? (bytes / 1024).toFixed(1) + " KB" : (bytes / 1048576).toFixed(2) + " MB";
     return width + " × " + height + " px · " + amount + (frames ? " · " + frames + "프레임" : "");
   }
-  async function load(files, handle = null) {
+  async function load(files, handle = null, draft = null) {
     if (busy || !files.length) return;
     if (files.length !== 1) return warning("GIF 파일을 한 번에 1개만 선택해 주세요.");
     busy = true;
@@ -88,13 +179,19 @@
     try {
       const file = files[0];
       const gif = inspectGif(new Uint8Array(await file.arrayBuffer()));
+      const restored = draft && draft.position > 0
+        ? inspectGif(new Uint8Array(await draft.steps[draft.steps[draft.position].gifStep].blob.arrayBuffer())) : gif;
       const url = URL.createObjectURL(new Blob([file], { type: "image/gif" }));
       if (originalUrl) URL.revokeObjectURL(originalUrl);
       if (resultUrl) URL.revokeObjectURL(resultUrl);
-      source = current = gif;
+      source = current = restored;
       sourceHandle = handle;
       resultBlob = null;
       filename = file.name;
+      position = draft?.position ?? 0;
+      steps = draft?.steps ?? [{tool:"",label:"원본 GIF",blob:new Blob([file],{type:"image/gif"}),gifStep:0}];
+      el("draftNote").textContent = "";
+      if (!draft) await persist(steps[0]);
       originalUrl = url;
       resultUrl = null;
       el("originalImage").src = url;
@@ -108,14 +205,38 @@
       locked = true;
       updateSizes();
       showTool("");
+      drawResult();
     } catch (error) {
       warning(error.message || "파일을 열 수 없습니다.");
     } finally {
       busy = false;
+      drawHistory();
       el("status").textContent = "";
     }
   }
-  el("choose").onclick = el("reset").onclick = async () => {
+  el("reset").onclick = async () => {
+    if (busy) return;
+    busy = true;
+    showTool("");
+    for (const id of ["originalImage","resultImage","resultVideo"]) el(id).removeAttribute("src");
+    el("resultVideo").load();
+    el("download").removeAttribute("href");
+    if (originalUrl) URL.revokeObjectURL(originalUrl);
+    if (resultUrl) URL.revokeObjectURL(resultUrl);
+    originalUrl = resultUrl = resultBlob = current = source = sourceHandle = null;
+    steps = [];
+    position = -1;
+    filename = "";
+    drawHistory();
+    await persist();
+    warning();
+    el("status").textContent = "";
+    el("workspace").hidden = true;
+    el("upload").hidden = false;
+    busy = false;
+    el("choose").focus();
+  };
+  el("choose").onclick = async () => {
     if (busy) return;
     if (!window.showOpenFilePicker) return el("file").click();
     try {
@@ -213,6 +334,7 @@
   el("go").onclick = async () => {
     if (busy) return;
     busy = true;
+    drawHistory();
     warning();
     const controls = [...el("settings").querySelectorAll("input, select, button"), el("reset"), el("save")];
     controls.forEach(control => control.disabled = true);
@@ -224,26 +346,22 @@
       });
       const blob = output.blob;
       const gif = blob.type === "image/gif" ? inspectGif(new Uint8Array(await blob.arrayBuffer())) : null;
-      const url = URL.createObjectURL(blob);
-      if (resultUrl) URL.revokeObjectURL(resultUrl);
-      resultUrl = url;
-      resultBlob = blob;
-      current = gif || source;
-      const name = activeTool === "Resize" ? "Resized_" + filename.replace(/\.gif$/i,"") + ".gif" : saveName();
-      const video = blob.type === "video/mp4";
-      el("resultVideo").pause();
-      el("resultVideo").removeAttribute("src");
-      el("resultVideo").load();
-      el("resultImage").hidden = video;
-      el("resultVideo").hidden = !video;
-      el(video ? "resultVideo" : "resultImage").src = url;
-      el("download").href = url;
-      el("download").hidden = activeTool !== "Resize";
-      el("resultTitle").textContent = activeTool === "Resize" ? "Resized GIF" : extension().toUpperCase() + " 편집 결과";
-      el("download").download = el("resultName").textContent = name;
-      el("resultInfo").textContent = info(gif?.width ?? output.width,gif?.height ?? output.height,blob,gif?.frames.length);
-      el("result").hidden = false;
       const delta = source.bytes.length - blob.size;
+      const tool = activeTool;
+      const width = gif?.width ?? output.width, height = gif?.height ?? output.height;
+      const detail = tool === "Resize" || tool === "Crop" ? width + "×" + height :
+        tool === "Speed" ? el("rate").value + "배" :
+        tool === "Rotate" ? el("rotate").selectedOptions[0].textContent :
+        tool === "Cut" ? el("start").value + "–" + el("end").value + "초" :
+        tool === "Format Convert" ? el("format").value.toUpperCase() : "";
+      const step = {tool,label:[tool,detail].filter(Boolean).join(" · "),width,height,blob,
+        frames:gif?.frames.length,gifStep:gif ? position+1 : steps[position].gifStep};
+      steps.splice(position+1,steps.length,step);
+      position++;
+      current = gif || source;
+      drawResult();
+      await persist(step);
+      showTool(tool);
       if (activeTool === "Optimize" || activeTool === "Downsizing") {
         el("status").textContent = delta === 0 ? "현재 설정에서 파일 크기가 같습니다." :
           Math.abs(delta).toLocaleString() + "바이트 " + (delta > 0 ? "줄었습니다." : "늘었습니다.");
@@ -257,6 +375,22 @@
     } finally {
       busy = false;
       controls.forEach(control => control.disabled = false);
+      drawHistory();
     }
   };
+  async function restoreDraft() {
+    el("upload").inert = true;
+    try {
+      const [meta,...saved] = await editorDraft.read();
+      if (meta && saved[meta.position]) {
+        const file = new File([saved[0].blob],meta.filename,{type:"image/gif"});
+        await load([file],meta.sourceHandle,{position:meta.position,steps:saved});
+      }
+    } catch {
+      el("draftNote").textContent = "작업 기록은 현재 화면에서 유지됩니다.";
+    } finally {
+      el("upload").inert = false;
+    }
+  }
+  restoreDraft();
 })();
