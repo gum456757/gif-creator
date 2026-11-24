@@ -8,6 +8,10 @@
   <link rel="stylesheet" href="editor.css">
   <script defer src="vendor/omggif.js"></script>
   <script defer src="gif-resize.js"></script>
+  <script defer src="vendor/gifenc.js"></script>
+  <script defer src="vendor/gifsicle.min.js"></script>
+  <script defer src="gif-tools.js"></script>
+  <script defer src="gif-export.js"></script>
   <script defer src="editor.js"></script>
 </head>
 <body>
@@ -32,10 +36,12 @@
           <img id="originalImage" class="preview" alt="원본 GIF 미리보기">
           <p id="originalName" class="name"></p><p id="originalInfo"></p>
         </details>
-        <section id="result" class="card" hidden><h2>Resized GIF</h2>
-          <img id="resultImage" class="preview" alt="크기를 조절한 GIF 미리보기">
+        <section id="result" class="card" hidden><h2 id="resultTitle">Resized GIF</h2>
+          <img id="resultImage" class="preview" alt="편집한 이미지 미리보기">
+          <video id="resultVideo" class="preview" controls playsinline hidden></video>
           <p id="resultName" class="name"></p><p id="resultInfo"></p>
           <a id="download" class="primary">다운로드</a>
+          <button id="save" class="primary">저장</button>
         </section>
       </div>
       <section class="card tools"><h2 id="toolTitle" tabindex="-1">편집 도구</h2>
@@ -48,13 +54,46 @@
             <label for="y">세로 (Y) <output id="yValue" for="y"></output></label>
             <input id="y" type="range" min="5" max="300" value="100">
           </div>
-          <p id="pending" hidden>이 도구는 준비 중입니다.</p>
+          <div class="options" data-tool="Crop" hidden>
+            <label>화면 비율 <select id="ratio"><option value="1">1:1</option><option value="1.7777777777777777">16:9</option><option value="0.5625">9:16</option><option value="1.3333333333333333">4:3</option><option value="0.75">3:4</option></select></label>
+            <label>채우기 방식 <select id="fill"><option value="cover">빈 공간 없이 중앙 자르기</option><option value="pad">전체 그림 맞추고 단색 채우기</option></select></label>
+            <label id="colorField" hidden>배경색 <input id="color" type="color" value="#ffffff"></label>
+          </div>
+          <div class="options" data-tool="Rotate" hidden><label>회전·대칭 <select id="rotate">
+            <option value="--rotate-90">시계 방향 90°</option><option value="--rotate-180">180°</option><option value="--rotate-270">시계 방향 270°</option><option value="--flip-horizontal">좌우 뒤집기</option><option value="--flip-vertical">상하 뒤집기</option>
+          </select></label></div>
+          <div class="options checks" data-tool="Downsizing" hidden>
+            <label><input id="shrink" type="checkbox" checked>크기 축소 (가로·세로 75%)</label>
+            <label><input id="dropFrames" type="checkbox">중간 프레임을 하나씩 건너뛰기</label>
+            <label><input id="low" type="checkbox">해상도 낮추기 (가로·세로 절반으로 샘플링)</label>
+          </div>
+          <div class="options" data-tool="Format Convert" hidden>
+            <label>저장 형식 <select id="format"><option value="mp4">MP4 동영상</option><option value="jpg">JPG 이미지</option></select></label>
+            <label id="jpgField" hidden>저장할 프레임 <input id="jpgFrame" type="number" min="1" value="1" step="1"></label>
+            <p>투명한 영역은 흰색으로 저장됩니다.</p>
+          </div>
+          <div class="options" data-tool="Optimize" hidden><p>프레임 사이에서 반복되는 픽셀을 압축해 화질과 재생 시간을 유지합니다.</p></div>
+          <div class="options" data-tool="Reverse" hidden><p>마지막 프레임부터 첫 프레임까지 거꾸로 재생합니다.</p></div>
+          <div class="options" data-tool="Speed" hidden><label>재생 속도 <select id="rate">
+            <option>0.25</option><option>0.5</option><option>0.75</option><option>1</option><option>1.5</option><option selected>2</option><option>3</option><option>4</option>
+          </select>배</label></div>
+          <div class="options" data-tool="Cut" hidden>
+            <p id="duration"></p>
+            <label>시작 (초) <input id="start" type="number" min="0" step="0.01" value="0"></label>
+            <label>종료 (초) <input id="end" type="number" min="0.01" step="0.01"></label>
+          </div>
           <div class="actions"><button id="back">Back</button><button id="go" class="primary">Go!</button></div>
         </div>
       </section>
       <button id="reset">다른 GIF 선택</button>
     </div>
     <p id="status" role="status"></p>
+    <dialog id="saveDialog"><form method="dialog">
+      <h2>편집 결과 저장</h2>
+      <label>파일 이름 <input id="saveName" required></label>
+      <p>이 브라우저에서는 다운로드 설정에서 저장 위치를 선택할 수 있습니다.</p>
+      <div class="actions"><button value="cancel" formnovalidate>취소</button><button value="save" class="primary">저장</button></div>
+    </form></dialog>
   </main>
 </body>
 </html>
