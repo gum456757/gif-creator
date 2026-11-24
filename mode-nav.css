@@ -1,0 +1,4 @@
+.mode-nav { position: relative; z-index: 1; display: flex; width: fit-content; margin: 12px auto 0; padding: 4px; border: 1px solid #ffffff55; border-radius: 999px; background: #06344e; }
+.mode-nav a { padding: 8px 23px; border-radius: inherit; color: white; font: 650 1rem/1.3 "Pretendard","Malgun Gothic",sans-serif; text-decoration: none; }
+.mode-nav a[aria-current] { background: #f2fbfd; color: #074568; }
+.mode-nav a:focus-visible { outline: 3px solid #ffc56d; }
